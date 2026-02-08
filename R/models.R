@@ -82,7 +82,7 @@ BeliefModel <- R6Class(
       self$tau <- tau
     },
     
-    fit = function(demand_dt, k_t = 3, k_past = 3) {
+    fit = function(demand_dt, k_t = 8, k_past = 10, qgam_maxit = 400) {
       dt <- as.data.table(demand_dt)
       dt <- dt[!is.na(current_demand) & !is.na(past_demand)]
       

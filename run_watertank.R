@@ -15,11 +15,6 @@ suppressPackageStartupMessages({
 
 set.seed(42)
 
-max.inflow = 10
-H.min = 5
-H.max = 50
-prices = c(rep(1,6),rep(3,2),rep(2,10),rep(3,2),rep(2,2),rep(1,2))
-eta = 0.85
 n_sample = 17600
 
 load("generated_data.RData")

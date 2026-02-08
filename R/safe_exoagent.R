@@ -69,7 +69,7 @@ SafeExoAgent <- R6Class(
   
       self$gamma <- gamma
       
-      cat("\n[1] Fitting belief model...\n")
+      cat("\n Fitting belief model...\n")
       
       # exo estimation
       self$belief <- BeliefModel$new(tau = belief_tau)
@@ -90,8 +90,8 @@ SafeExoAgent <- R6Class(
         gamma = gamma,
         Q_model = GAMRegressor$new(),
         V_model = ExpectileGAM$new(tau = reward_tau, n_irls = 8),
-        q_terms = c("s(x, k = 1)", "s(hour, bs='cc', k=3)", "s(a, k = 1)"),
-        v_terms = c("s(x, k = 1)", "s(hour, bs='cc', k=3)"),
+        q_terms = c("s(x, k = 3)", "s(hour, bs='cc', k=3)", "s(a, k = 3)"),
+        v_terms = c("s(x, k = 3)", "s(hour, bs='cc', k=3)"),
         reward_col = "r",
         mask_col = "mask"
       )
@@ -103,8 +103,8 @@ SafeExoAgent <- R6Class(
         critic_type = critic_type,
         Q_model = GAMRegressor$new(),
         V_model = ExpectileGAM$new(tau = 1 - safety_tau, n_irls = 8),
-        q_terms = c("s(x, k=1)", "s(hour, bs='cc', k=3)", "s(a, k=1)", "s(xi_tilde, k=3)"),
-        v_terms = c("s(x, k=1)", "s(hour, bs='cc', k=3)", "s(xi_tilde, k=3)"),
+        q_terms = c("s(x, k=3)", "s(hour, bs='cc', k=3)", "s(a, k=3)", "s(xi_tilde, k=3)"),
+        v_terms = c("s(x, k=3)", "s(hour, bs='cc', k=3)", "s(xi_tilde, k=3)"),
         viol_col = "violation",
         mask_col = "mask"
       )
@@ -118,7 +118,7 @@ SafeExoAgent <- R6Class(
       )
       dp <- self$weighter$compute(dt_policy, self$reward, self$safety)
       
-      self$policy <- WeightedGaussianPolicy$new(mu_terms = c("s(x,  k=1)", "s(hour, bs='cc', k=3)"), deterministic = TRUE)
+      self$policy <- WeightedGaussianPolicy$new(mu_terms = c("s(x,  k=3)", "s(hour, bs='cc', k=3)"), deterministic = TRUE)
       self$policy$fit(dp, w_col = "w", a_col = "a")
       
       invisible(self)
