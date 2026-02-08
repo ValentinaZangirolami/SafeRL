@@ -20,11 +20,13 @@ FeasibilityWeighter <- R6Class(
     compute = function(dt, reward_learner, safety_learner) {
       d <- as.data.table(copy(dt))
       
-      d[, q := reward_learner$predict_Q(.SD), .SDcols = c("x", "a")]
-      d[, v := reward_learner$predict_V(.SD), .SDcols = c("x")]
+      cat("\n Policy Start fitting\n")
       
-      d[, qc := safety_learner$predict_Q(.SD), .SDcols = c("x", "a", "xi_tilde")]
-      d[, vc := safety_learner$predict_V(.SD), .SDcols = c("x", "xi_tilde")]
+      d[, q := reward_learner$predict_Q(.SD), .SDcols = c("x", "a", "hour")]
+      d[, v := reward_learner$predict_V(.SD), .SDcols = c("x", "hour")]
+      
+      d[, qc := safety_learner$predict_Q(.SD), .SDcols = c("x", "a", "hour", "xi_tilde")]
+      d[, vc := safety_learner$predict_V(.SD), .SDcols = c("x", "hour", "xi_tilde")]
       
       unsafe_condition <- as.numeric(d[["vc"]] > 0)
       safe_condition   <- as.numeric(d[["vc"]] <= 0) * as.numeric(d[["qc"]] <= 0)
