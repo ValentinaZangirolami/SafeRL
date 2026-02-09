@@ -10,7 +10,247 @@ make_probe_grid <- function(x_min, x_max, xi_min, xi_max,
   )
 }
 
+data_mix_policy <- function(X, knowledge,
+                                            replace_frac = 0.1,
+                                            max_inflow = 10,
+                                            H_min = 5,
+                                            eta = 0.85,
+                                            seed = 123,
+                                            clip_upper = FALSE,
+                                            H_max = 50) {
+  set.seed(seed)
+  X <- data.table::as.data.table(data.table::copy(X))
+  stopifnot(all(c("day","hour","h","h_next","a","r","current_demand","past_demand","violation") %in% names(X)))
+  
+  # choose days to replace
+  days <- sort(unique(X$day))
+  n_days <- length(days)
+  m <- max(1, floor(replace_frac * n_days))
+  days_rep <- sample(days, m, replace = FALSE)
+  
+  # true demand per day/hour from original generator
+  S  <- knowledge$s
+  A  <- knowledge$a
+  S_ <- knowledge$s_
+  D_true <- S + A - S_  # signed true demand
+  
+  syn_list <- vector("list", length(days_rep))
+  
+  for (idx in seq_along(days_rep)) {
+    d_id <- days_rep[idx]
+    d_seq <- as.numeric(D_true[d_id, ])
+    t_max <- length(d_seq)
+    
+    h <- as.numeric(S[d_id, 1])
+    
+    hour <- 1:t_max
+    hour_next <- ifelse(hour == 24L, 1L, hour + 1L)
+    
+    h_vec <- numeric(t_max)
+    a_vec <- numeric(t_max)
+    h_next_vec <- numeric(t_max)
+    r_vec <- numeric(t_max)
+    viol_vec <- numeric(t_max)
+    
+    cur_dem <- abs(d_seq)
+    past_dem <- c(NA, abs(d_seq[-T]))
+    
+    for (t in 1:t_max) {
+      a <- runif(1, 0, max_inflow)
+      
+      h_next <- h + a - d_seq[t]
+      
+      if (isTRUE(clip_upper)) h_next <- pmin(h_next, H_max)
+      
+      violation <- d_seq[t] - (h - H_min)
+      
+      r <- get_reward(hour = t, action = a, eta = eta)
+      
+      h_vec[t] <- h
+      a_vec[t] <- a
+      h_next_vec[t] <- h_next
+      viol_vec[t] <- violation
+      r_vec[t] <- r
+      
+      h <- h_next
+    }
+    
+    syn_list[[idx]] <- data.table::data.table(
+      day = d_id,
+      hour = hour,
+      hour_next = as.integer(hour_next),
+      h = round(h_vec, 4),
+      a = round(a_vec, 4),
+      h_next = round(h_next_vec, 4),
+      r = round(r_vec, 6),
+      current_demand = round(cur_dem, 4),
+      past_demand = round(past_dem, 4),
+      violation = round(viol_vec, 4),
+      synthetic = 1L
+    )
+  }
+  
+  syn_dt <- data.table::rbindlist(syn_list)
+  
+  X[, synthetic := 0L]
+  X_kept <- X[!day %in% days_rep]
+  
+  X_new <- data.table::rbindlist(list(X_kept, syn_dt), use.names = TRUE, fill = TRUE)
+  stopifnot(nrow(X_new) == nrow(X))
+  
+  list(X = X_new[order(day, hour)], replaced_days = days_rep)
+}
+
+make_dataset = function(knowledge, H.min=5, aug = FALSE){
+  N = nrow(knowledge$s) * ncol(knowledge$s)
+  X = data.frame(
+    day <- integer(N),
+    hour = numeric(N),
+    h = numeric(N),
+    a = numeric(N),
+    h_next = numeric(N),
+    r = numeric(N),
+    current_demand = numeric(N),
+    past_demand = numeric(N),
+    violation = numeric(N)
+  )
+  
+  k = 1
+  for (i in 1:nrow(knowledge$s)) {
+    for (j in 1:ncol(knowledge$s)) {
+      X$day[k] <- i
+      X$hour[k]      = j
+      X$h[k]      = round(knowledge$s[i,j], 4)
+      X$a[k]      = round(knowledge$a[i,j], 4)
+      X$h_next[k] = round(knowledge$s_[i,j], 4)
+      X$r[k]      = - round(knowledge$r[i,j], 4)
+      demand_true <- X$h[k] + X$a[k] - X$h_next[k] 
+      X$violation[k] = demand_true - (X$h[k]- H.min)
+      
+      if (j != 1) {
+        X$current_demand[k] = round(abs(X$h[k] + X$a[k] - X$h_next[k]), 4)
+        X$past_demand[k]    = X$current_demand[k-1]
+      } else {
+        X$current_demand[k] = round(abs(X$h[k] + X$a[k] - X$h_next[k]), 4)
+        X$past_demand[k]    = 0
+      }
+      k = k + 1
+    }
+  }
+  X <- ifelse(aug==TRUE, X, X[,-1])
+  return(X)
+}
+
 # eval test
+
+test_policy_one_step <- function(dt, agent,
+                                  H_min = 5,
+                                  max_inflow = 10,
+                                  eta = 0.85,
+                                  only_hours = 1:23) {
+  dt <- data.table::as.data.table(data.table::copy(dt))
+  
+  # restrict to hours where past_demand is defined and you want to test
+  dt <- dt[hour %in% only_hours]
+  dt <- dt[!is.na(past_demand)]
+  
+  # compute action from agent row-wise
+  out <- dt[, {
+    res <- agent$act(hour = hour, h = h, past_demand = past_demand)
+    list(a_pi = as.numeric(res$a),
+         xi_tilde = as.numeric(res$xi_tilde))
+  }, by = .(day, hour)]
+  
+  dt <- merge(dt, out, by = c("day", "hour"), all.x = TRUE)
+  
+  # enforce bounds in case (should already be bounded by policy)
+  dt[, a_pi := pmin(pmax(a_pi, 0), max_inflow)]
+  
+  # counterfactual next state using observed demand_true
+  dt[, h_next_pi := h + a_pi - demand_true]
+  
+  # reward under new action (your function)
+  dt[, r_pi := get_reward(hour = hour, action = a_pi, eta = eta)]
+  
+  # violation under your definition (same as you used)
+  dt[, violation_pi := demand_true - (h - H_min)]
+  
+  # next hour
+  dt[, hour_next := ifelse(hour == 24L, 1L, hour + 1L)]
+  
+  dt
+}
+
+rollout_policy_replay <- function(agent,
+                                  knowledge,
+                                  H_min = 5,
+                                  eta = 0.85,
+                                  max_inflow = 10,
+                                  H_max = 50) {
+  init_past <- match.arg(init_past)
+  
+  D_true <- knowledge$s + knowledge$a - knowledge$s_     
+  S0 <- knowledge$s[, 1]                          
+  
+  n_days <- nrow(D_true)
+  t_max <- ncol(D_true)
+  
+  out <- vector("list", n_days)
+  
+  for (day in 1:n_days) {
+    d_seq <- as.numeric(D_true[day, ])
+    h <- as.numeric(S0[day])
+    
+    past_demand <- 0
+    
+    dt_day <- data.table::data.table(
+      day = day,
+      hour = 1:t_max,
+      h = NA_real_,
+      past_demand = NA_real_,
+      demand_true = d_seq,
+      a_pi = NA_real_,
+      h_next = NA_real_,
+      r_pi = NA_real_,
+      violation_pi = NA_real_,
+      xi_tilde = NA_real_
+    )
+    
+    for (t in 1:t_max) {
+
+      act <- agent$act(hour = t, h = h, past_demand = past_demand)
+      a <- as.numeric(act$a)
+      xi_tilde <- as.numeric(act$xi_tilde)
+      
+      a <- pmin(pmax(a, 0), max_inflow)
+      
+      r <- get_reward(hour = t, action = a, eta = eta)
+      viol <- d_seq[t] - (h - H_min)
+      
+      h_next <- h + a - d_seq[t]
+      
+      
+      dt_day[t, `:=`(
+        h = h,
+        past_demand = past_demand,
+        a_pi = a,
+        h_next = h_next,
+        r_pi = r,
+        violation_pi = viol,
+        xi_tilde = xi_tilde
+      )]
+      
+      h <- h_next
+      past_demand <- abs(d_seq[t])
+    }
+    
+    out[[day]] <- dt_day
+  }
+  
+  data.table::rbindlist(out)
+}
+
+
 
 #violations
 # x_mat has to be N x T
@@ -37,7 +277,8 @@ count_state_violations <- function(x_mat, H_min = 5, H_max = 50) {
 
 #costs 
 
-get_reward <- function(hour, action){
+get_reward <- function(hour, action, eta=0.85){
   prices = c(rep(1,6),rep(3,2),rep(2,10),rep(3,2),rep(2,2),rep(1,2))
-  reward = prices[hour] * (1/eta) * action^(1/3)
+  reward = -(prices[hour] * (1/eta) * action^(1/3))
+  return(reward)
 }

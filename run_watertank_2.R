@@ -1,10 +1,12 @@
 # ============================================================
 # Offline safe RL with:
-#  - demand estimation on demand_data
+#  - belief estimation (demand) on demand_data
 #  - reward critics (Q_r, V_r) on data_1
 #  - safety critics (Q_h, V_h) on data_2
 #  - weighted MLE policy on data_3
 # ============================================================
+
+#augmented dataset
 
 suppressPackageStartupMessages({
   library(mgcv)
@@ -14,13 +16,30 @@ suppressPackageStartupMessages({
   library(data.table)
 })
 
+# Load modules
+source("R/models.R")
+source("R/safe_rl.R")
+source("R/policy.R")
+source("R/safe_exoagent.R")
+source("R/utils.R")
+
 set.seed(42)
 H.min = 5
+H.min = 50
 n_sample = 17600
 
 load("generated_data.RData")
 
-X <- make_dataset(knowledge)
+X<- make_dataset(knowledge, aug =TRUE)
+
+# replace 0.3
+
+X <- data_mix_policy(X, knowledge, replace_frac = 0.3)
+
+day_random <- X$replaced_days
+X <- X$X
+names_to_remove <- c("hour_next", "synthetic", names(X)[1])
+X[, (names_to_remove) := NULL]
 
 # Split 
 set.seed(42)
@@ -34,16 +53,9 @@ reward_data <- X[grp == 2, ]
 safety_data <- X[grp == 3, ]
 policy_data <- X[grp == 4, ]
 
-#save(demand_data, reward_data, safety_data, policy_data,  file="std_split_data.RData")
+#save(demand_data, reward_data, safety_data, policy_data,  file="aug_split_data.RData")
 
 rm(knowledge, X)
-
-# Load modules
-source("R/models.R")
-source("R/safe_rl.R")
-source("R/policy.R")
-source("R/safe_exoagent.R")
-source("R/utils.R")
 
 # Fit agent
 agent <- SafeExoAgent$new()
@@ -62,7 +74,7 @@ agent$fit(
   cost_ub = 200.0
 )
 
-eval_learning <- agent$safety$log
+eval_learning_aug <- agent$safety$log
 
 # data test 
 
@@ -83,4 +95,4 @@ traj_pi <- rollout_policy_replay(agent = agent, knowledge = knowledge)
 
 
 # save data for evaluation
-save(eval_learning, traj_pi, X_pi, file="std_data_eval.RData")
+save(eval_learning_aug, traj_pi, X_pi, file="aug_data_eval.RData")
