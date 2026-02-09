@@ -10,11 +10,12 @@ suppressPackageStartupMessages({
   library(mgcv)
   library(dplyr)
   library(qgam)
+  library(ggplot2)
   library(data.table)
 })
 
 set.seed(42)
-
+H.min = 5
 n_sample = 17600
 
 load("generated_data.RData")
@@ -38,9 +39,9 @@ for (i in 1:nrow(knowledge$s)) {
     X$h[k]      = round(knowledge$s[i,j], 4)
     X$a[k]      = round(knowledge$a[i,j], 4)
     X$h_next[k] = round(knowledge$s_[i,j], 4)
-    X$r[k]      = round(knowledge$r[i,j], 4)
+    X$r[k]      = - round(knowledge$r[i,j], 4)
     demand_true <- X$h[k] + X$a[k] - X$h_next[k] 
-    X$violation[k] = demand_true - X$h[k]
+    X$violation[k] = demand_true - (X$h[k]- H.min)
     
     if (j != 1) {
       X$current_demand[k] = round(abs(X$h[k] + X$a[k] - X$h_next[k]), 4)
@@ -72,6 +73,7 @@ source("R/models.R")
 source("R/safe_rl.R")
 source("R/policy.R")
 source("R/safe_exoagent.R")
+source("R/utils.R")
 
 # Fit agent
 agent <- SafeExoAgent$new()
@@ -89,5 +91,12 @@ agent$fit(
   reward_temperature = 3.0,
   cost_ub = 200.0
 )
+
+# evaluation safety during learning
+
+ggplot(agent$safety$log, aes(x = iter, y = feasible_frac)) +
+  geom_line() + geom_point() +
+  labs(x = "Iteration", y = "Feasible fraction") + xlim(0, 1) +
+  theme_minimal()
 
 print(agent$act(hour = 10, h = 20, past_demand = 5))

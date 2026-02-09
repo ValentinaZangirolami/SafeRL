@@ -52,3 +52,35 @@ cat("> ...Done!\n")
 cat("> Saving data...\n")
 save( "knowledge", file="generated_data.RData" )
 cat("> ...DOne!\n")
+
+#test
+n.days <- 365
+
+
+cat("> Starting generation of data for",n.days,"days...\n")
+knowledge <- tank.episodes.generator( N=n.days, # number of days (i.e., 1 year)
+                                      H=c(H.min,H.max), # min-max tank level
+                                      X=c(0,max.inflow), # min-max pump
+                                      mu.h=h0.mean, # initial tank level normal distribution (mean)
+                                      sd.h=h0.sd, # initial tank level normal distribution (sd)
+                                      mu.xi=mu.xi, # water demand (mean at each step)
+                                      sd.xi=sd.xi, # water demand (sd at each step)
+                                      policy=policy, # safe policy
+                                      prices=prices, # energy price tariff
+                                      eta=eta, # pump efficiency coefficient
+                                      seed=42 #  seed
+)
+
+knowledge$s <- round(knowledge$s,dgt)
+knowledge$a <- round(knowledge$a,dgt)
+knowledge$s_ <- round(knowledge$s_,dgt)
+knowledge$r <- round(knowledge$r,dgt)
+
+stopifnot( length(which(knowledge$s<H.min))==0 | length(which(knowledge$s_<H.min))==0)
+stopifnot( length(which(knowledge$s>H.max))==0 | length(which(knowledge$s_>H.max))==0)
+
+cat("> ...Done!\n")
+
+cat("> Saving data...\n")
+save( "knowledge", file="test_data.RData" )
+cat("> ...DOne!\n")

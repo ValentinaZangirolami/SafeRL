@@ -115,36 +115,68 @@ WeightedGaussianPolicy <- R6Class(
     mu_terms = NULL,
     sigma = NULL,
     deterministic = NULL,
+    a_min = NULL,
+    a_max = NULL,
+    eps = 1e-6,
     
-    initialize = function(mu_terms, deterministic = TRUE) {
+    initialize = function(mu_terms,
+                          a_min = 0,
+                          a_max = 10,
+                          deterministic = TRUE) {
       self$mu <- GAMRegressor$new()
       self$mu_terms <- mu_terms
       self$deterministic <- deterministic
+      self$a_min <- a_min
+      self$a_max <- a_max
       self$sigma <- 1.0
     },
     
     fit = function(dt, w_col = "w", a_col = "a") {
       stopifnot(is.data.table(dt))
+      
+      a <- dt[[a_col]]
       w <- dt[[w_col]]
+      
       w[!is.finite(w) | w < 0] <- 0
       if (sum(w) <= 0) w <- rep(1, nrow(dt))
       
-      self$mu$fit(dt, y_col = a_col, x_terms = self$mu_terms, w = w)
+      z <- (a - self$a_min) / (self$a_max - self$a_min)
+      z <- pmin(pmax(z, self$eps), 1 - self$eps)
       
-      mu_hat <- self$mu$predict(dt)
-      resid <- dt[[a_col]] - mu_hat
+      eta <- qlogis(z)
+      
+      d <- copy(dt)
+      d[, eta := eta]
+      
+      self$mu$fit(d, y_col = "eta", x_terms = self$mu_terms, w = w)
+      
+      eta_hat <- self$mu$predict(d)
+      resid <- eta - eta_hat
       self$sigma <- sqrt(sum(w * resid^2) / sum(w))
-      if (!is.finite(self$sigma) || self$sigma < 1e-6) self$sigma <- 1e-3
+      
+      if (!is.finite(self$sigma) || self$sigma < 1e-6)
+        self$sigma <- 1e-3
+      
       invisible(self)
     },
     
+    # actions
     act = function(dt_state) {
-      m <- as.numeric(self$mu$predict(dt_state))
-      if (self$deterministic) return(m)
-      rnorm(1, mean = m, sd = self$sigma)
+      eta_hat <- as.numeric(self$mu$predict(dt_state))
+      
+      if (!self$deterministic) {
+        eta_hat <- rnorm(1, mean = eta_hat, sd = self$sigma)
+      }
+      
+      # squash to bounds
+      a <- self$a_min +
+        (self$a_max - self$a_min) * plogis(eta_hat)
+      
+      as.numeric(a)
     }
   )
 )
+
 
 
 RewardLearner <- R6Class(
@@ -178,8 +210,6 @@ RewardLearner <- R6Class(
       # ---- BOOTSTRAP Q ----
       d[, target0 := get(self$reward_col)]
       self$Q$fit(d, y_col = "target0", x_terms = self$q_terms)
-      
-      cat("\n RewardLearner Start fitting\n")
       
       for (k in seq_len(n_iter)) {
         
