@@ -83,6 +83,5 @@ X_pi <- test_policy_one_step(dt = X_test, agent = agent)
 
 traj_pi <- rollout_policy_replay(agent = agent, knowledge = knowledge)
 
-
 # save data for evaluation
 save(eval_learning, traj_pi, X_pi, file="std_data_eval.RData")

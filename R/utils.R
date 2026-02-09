@@ -180,11 +180,10 @@ rollout_policy_replay <- function(agent,
                                   knowledge,
                                   H_min = 5,
                                   eta = 0.85,
-                                  max_inflow = 10,
-                                  H_max = 50) {
+                                  max_inflow = 10) {
   
-  D_true <- knowledge$s + knowledge$a - knowledge$s_     
-  S0 <- knowledge$s[, 1]                          
+  D_true <- abs(knowledge$s + knowledge$a - knowledge$s_)  
+  S0 <- knowledge$s[, 1]
   
   n_days <- nrow(D_true)
   t_max <- ncol(D_true)
@@ -202,7 +201,7 @@ rollout_policy_replay <- function(agent,
       hour = 1:t_max,
       h = NA_real_,
       past_demand = NA_real_,
-      demand_true = d_seq,
+      demand_true = d_seq,   
       a_pi = NA_real_,
       h_next = NA_real_,
       r_pi = NA_real_,
@@ -210,8 +209,13 @@ rollout_policy_replay <- function(agent,
       xi_tilde = NA_real_
     )
     
+    dt_day[hour == 1, `:=`(
+      h = h,
+      past_demand = past_demand
+    )]
+    
     for (t in 1:t_max) {
-
+      # decision happens at state h (which is the state at hour t-1)
       act <- agent$act(hour = t, h = h, past_demand = past_demand)
       a <- as.numeric(act$a)
       xi_tilde <- as.numeric(act$xi_tilde)
@@ -219,23 +223,21 @@ rollout_policy_replay <- function(agent,
       a <- pmin(pmax(a, 0), max_inflow)
       
       r <- get_reward(hour = t, action = a, eta = eta)
-      viol <- d_seq[t] - (h - H_min)
       
-      h_next <- h + a - d_seq[t]
+      # demand for this transition
+      d_t <- d_seq[t]
+      
+      viol <- d_t - (h - H_min)
+      h_next <- h + a - d_t
       
       
-      dt_day[t, `:=`(
-        h = h,
-        past_demand = past_demand,
-        a_pi = a,
-        h_next = h_next,
-        r_pi = r,
-        violation_pi = viol,
-        xi_tilde = xi_tilde
-      )]
+      dt_day[hour == t, `:=`(h = ..h, past_demand = ..past_demand, h_next = ..h_next, xi_tilde = ..xi_tilde, a_pi = a, r_pi = r,
+                             violation_pi = viol)]
       
+      
+      # advance
       h <- h_next
-      past_demand <- abs(d_seq[t])
+      past_demand <- abs(d_t)
     }
     
     out[[day]] <- dt_day
@@ -243,8 +245,6 @@ rollout_policy_replay <- function(agent,
   
   data.table::rbindlist(out)
 }
-
-
 
 #violations
 # x_mat has to be N x T
