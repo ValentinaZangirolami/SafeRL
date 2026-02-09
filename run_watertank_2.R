@@ -82,12 +82,12 @@ load("test_data.RData")
 
 X_test <- make_dataset(knowledge)
 
-names_to_keep<- c("hour", "h", "past_demand", "r")
-X_test <- X_test[, ..names_to_keep]
+names_to_keep<- c("hour", "h", "past_demand", "r", "day", "current_demand")
+X_test <- X_test[, names_to_keep]
 
 #one-step rollout
 
-X_pi_aug <- apply_policy_one_step(dt = X_test, agent = agent)
+X_pi_aug <- test_policy_one_step(dt = X_test, agent = agent)
 
 #rollout replay 
 

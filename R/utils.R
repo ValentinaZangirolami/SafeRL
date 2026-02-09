@@ -28,11 +28,11 @@ data_mix_policy <- function(X, knowledge,
   m <- max(1, floor(replace_frac * n_days))
   days_rep <- sample(days, m, replace = FALSE)
   
-  # true demand per day/hour from original generator
+  # true demand per day/hour from original data
   S  <- knowledge$s
   A  <- knowledge$a
   S_ <- knowledge$s_
-  D_true <- S + A - S_  # signed true demand
+  D_true <- abs(S + A - S_)  # true demand
   
   syn_list <- vector("list", length(days_rep))
   
@@ -150,11 +150,11 @@ test_policy_one_step <- function(dt, agent,
                                   only_hours = 1:23) {
   dt <- data.table::as.data.table(data.table::copy(dt))
   
-  # restrict to hours where past_demand is defined and you want to test
+  # hours from 1 to 23
   dt <- dt[hour %in% only_hours]
   dt <- dt[!is.na(past_demand)]
   
-  # compute action from agent row-wise
+  # compute action from agent
   out <- dt[, {
     res <- agent$act(hour = hour, h = h, past_demand = past_demand)
     list(a_pi = as.numeric(res$a),
@@ -163,19 +163,14 @@ test_policy_one_step <- function(dt, agent,
   
   dt <- merge(dt, out, by = c("day", "hour"), all.x = TRUE)
   
-  # enforce bounds in case (should already be bounded by policy)
   dt[, a_pi := pmin(pmax(a_pi, 0), max_inflow)]
   
-  # counterfactual next state using observed demand_true
-  dt[, h_next_pi := h + a_pi - demand_true]
+  dt[, h_next_pi := h + a_pi - current_demand]
   
-  # reward under new action (your function)
   dt[, r_pi := get_reward(hour = hour, action = a_pi, eta = eta)]
   
-  # violation under your definition (same as you used)
-  dt[, violation_pi := demand_true - (h - H_min)]
+  dt[, violation_pi := current_demand - (h - H_min)]
   
-  # next hour
   dt[, hour_next := ifelse(hour == 24L, 1L, hour + 1L)]
   
   dt
@@ -187,7 +182,6 @@ rollout_policy_replay <- function(agent,
                                   eta = 0.85,
                                   max_inflow = 10,
                                   H_max = 50) {
-  init_past <- match.arg(init_past)
   
   D_true <- knowledge$s + knowledge$a - knowledge$s_     
   S0 <- knowledge$s[, 1]                          

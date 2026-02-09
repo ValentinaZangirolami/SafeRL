@@ -29,6 +29,8 @@ load("generated_data.RData")
 
 X <- make_dataset(knowledge)
 
+N <- nrow(X)
+
 # Split 
 set.seed(42)
 grp <- integer(N)
@@ -70,12 +72,12 @@ load("test_data.RData")
 
 X_test <- make_dataset(knowledge)
 
-names_to_keep<- c("hour", "h", "past_demand", "r")
-X_test <- X_test[, ..names_to_keep]
+names_to_keep<- c("hour", "h", "past_demand", "r", "day", "current_demand")
+X_test <- X_test[, names_to_keep]
 
 #one-step rollout
 
-X_pi <- apply_policy_one_step(dt = X_test, agent = agent)
+X_pi <- test_policy_one_step(dt = X_test, agent = agent)
 
 #rollout replay 
 
