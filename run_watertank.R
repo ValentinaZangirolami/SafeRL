@@ -14,6 +14,13 @@ suppressPackageStartupMessages({
   library(data.table)
 })
 
+# Load modules
+source("R/models.R")
+source("R/safe_rl.R")
+source("R/policy.R")
+source("R/safe_exoagent.R")
+source("R/utils.R")
+
 set.seed(42)
 H.min = 5
 n_sample = 17600
@@ -37,13 +44,6 @@ policy_data <- X[grp == 4, ]
 #save(demand_data, reward_data, safety_data, policy_data,  file="std_split_data.RData")
 
 rm(knowledge, X)
-
-# Load modules
-source("R/models.R")
-source("R/safe_rl.R")
-source("R/policy.R")
-source("R/safe_exoagent.R")
-source("R/utils.R")
 
 # Fit agent
 agent <- SafeExoAgent$new()

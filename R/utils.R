@@ -137,7 +137,7 @@ make_dataset = function(knowledge, H.min=5, aug = FALSE){
       k = k + 1
     }
   }
-  X <- ifelse(aug==TRUE, X, X[,-1])
+  X <- if (aug) X else X[, -1]
   return(X)
 }
 

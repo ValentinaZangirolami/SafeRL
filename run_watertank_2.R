@@ -87,12 +87,11 @@ X_test <- X_test[, ..names_to_keep]
 
 #one-step rollout
 
-X_pi <- apply_policy_one_step(dt = X_test, agent = agent)
+X_pi_aug <- apply_policy_one_step(dt = X_test, agent = agent)
 
 #rollout replay 
 
-traj_pi <- rollout_policy_replay(agent = agent, knowledge = knowledge)
-
+traj_pi_aug <- rollout_policy_replay(agent = agent, knowledge = knowledge)
 
 # save data for evaluation
-save(eval_learning_aug, traj_pi, X_pi, file="aug_data_eval.RData")
+save(eval_learning_aug, traj_pi_aug, X_pi_aug, file="aug_data_eval.RData")
