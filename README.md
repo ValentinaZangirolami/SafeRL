@@ -85,7 +85,7 @@ install.packages(c(
 
 If you use this code, please cite:
 
-Zangirolami, V., Pavesi, F. and Zanotti, M. (2026). *Safe Exogenous State Reinforcement Learning for water tank system*. Statistical Science: From Theory to Applied Research IV (to appear).
+Zangirolami, V., Pavesi, F. and Zanotti, M. (2026). *Safe Exogenous State Reinforcement Learning for water tank system*. Statistical Science: From Theory to Applied Research IV.
 
 ```bibtex
 @incollection{zangirolami2026safeexo,
